@@ -1,9 +1,14 @@
 import com.gargoylesoftware.htmlunit.*;
 import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * A local business aggregator page scraper
@@ -24,8 +29,21 @@ public class LBScraper {
         webClient.waitForBackgroundJavaScript(3000);
 
         try {
+            // Change charset for non-latin alphabet pages
             WebRequest webRequest = new WebRequest(new URL(this.searchUrl));
             webRequest.setCharset("utf-8");
+
+            // Use proxy for page parsing
+            Page proxyPage = webClient.getPage("http://proxy.minjja.lt/api/?type=http");
+            WebResponse response = proxyPage.getWebResponse();
+            if (response.getContentType().equals("application/json")) {
+                String jsonProxy = response.getContentAsString();
+                Map<String, String> jsonMap = new Gson().fromJson(jsonProxy, new TypeToken<Map<String,String>>() {}.getType());
+                ProxyConfig proxyConfig = new ProxyConfig(jsonMap.get("ip"), Integer.valueOf(jsonMap.get("port")));
+                webClient.getOptions().setProxyConfig(proxyConfig);
+            }
+
+            List<String> profileLinks = new ArrayList<String>();
             HtmlPage htmlPage = webClient.getPage(webRequest);
             HtmlAnchor nxtLink = (HtmlAnchor)htmlPage.getByXPath("//*[@id='ctl00_ContentPlaceHolder1_DataPager1']/div/ul/li[@class='selected']/following-sibling::li/a").get(0);
             htmlPage = nxtLink.click();
