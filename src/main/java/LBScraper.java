@@ -3,6 +3,10 @@ import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.net.URL;
@@ -22,17 +26,13 @@ public class LBScraper {
         this.searchUrl = "http://www.abv.mk/search.aspx?s=" + searchString;
     }
 
-    public void parse() {
+    public void parse(int pageNum) {
 
         WebClient webClient = new WebClient(BrowserVersion.FIREFOX_45);
         webClient.getOptions().setJavaScriptEnabled(true);
         webClient.waitForBackgroundJavaScript(3000);
 
         try {
-            // Change charset for non-latin alphabet pages
-            WebRequest webRequest = new WebRequest(new URL(this.searchUrl));
-            webRequest.setCharset("utf-8");
-
             // Use proxy for page parsing
             Page proxyPage = webClient.getPage("http://proxy.minjja.lt/api/?type=http");
             WebResponse response = proxyPage.getWebResponse();
@@ -43,63 +43,61 @@ public class LBScraper {
                 webClient.getOptions().setProxyConfig(proxyConfig);
             }
 
-            List<String> profileLinks = new ArrayList<String>();
+            // Change charset for non-latin alphabet pages
+            WebRequest webRequest = new WebRequest(new URL(this.searchUrl));
+            webRequest.setCharset("utf-8");
             HtmlPage htmlPage = webClient.getPage(webRequest);
-            HtmlAnchor nxtLink = (HtmlAnchor)htmlPage.getByXPath("//*[@id='ctl00_ContentPlaceHolder1_DataPager1']/div/ul/li[@class='selected']/following-sibling::li/a").get(0);
-            htmlPage = nxtLink.click();
 
-            int count = 3;
-            while(count > 0) {
-                // Wait for javascript to catch up.
-                count = webClient.waitForBackgroundJavaScript(3000);
+            List<String> profileLinks = new ArrayList<String>();
+            while(pageNum > 0) {
+
+                profileLinks.addAll(parseProfileLinks(htmlPage.asXml()));
+
+                HtmlAnchor nxtLink = (HtmlAnchor) htmlPage.getByXPath("//*[@id='ctl00_ContentPlaceHolder1_DataPager1']/div/ul/li[@class='selected']/following-sibling::li/a").get(0);
+                htmlPage = nxtLink.click();
+                int count = 3;
+                while (count > 0) {
+                    // Wait for javascript to catch up.
+                    count = webClient.waitForBackgroundJavaScript(3000);
+                }
             }
-            System.out.println(htmlPage.asXml());
+
+            List<SubscriberBean> subscribers = new ArrayList<SubscriberBean>();
+            for (String link : profileLinks) {
+
+                subscribers.add(parseSubscriber(link));
+
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
 
-//        try {
-//            Document doc = Jsoup.connect(this.searchUrl)
-//                    .userAgent("Mozilla")
-//                    .get();
-//            System.out.println(doc.toString());
-//            Elements businessLinks = doc.select("div.result h2.fontot a.companyname");
-//            Element viewstate = doc.select("input#__VIEWSTATE").first();
-//            Element viewstateGenerator = doc.select("input#__VIEWSTATEGENERATOR").first();
-//            Element eventValidation = doc.select("input#__EVENTVALIDATION").first();
-//
-//            postData.put("__VIEWSTATE", viewstate.attr("value"));
-//            postData.put("__VIEWSTATEGENERATOR", viewstateGenerator.attr("value"));
-//            postData.put("__EVENTVALIDATION", eventValidation.attr("value"));
-//
-//
-//            for (Element pageEl : businessLinks) {
-//                String pageLink = this.siteUrl + pageEl.attr("href");
-//                System.out.println(pageLink);
-//                Document pDoc = Jsoup.connect(pageLink)
-//                        .userAgent("Mozilla")
-//                        .get();
-//            }
-//
-//            System.out.println("PAGE 2");
-//
-//            Connection.Response response = Jsoup.connect(this.searchUrl)
-//                    .userAgent("Mozilla/5.0")
-//                    .method(Connection.Method.POST)
-//                    .data(postData)
-//                    .followRedirects(true)
-//                    .execute();
-//
-//            Document doc2 = response.parse();
-//            Elements businessLinks2 = doc2.select("div.result h2.fontot a.companyname");
-//            for (Element pageEl : businessLinks2) {
-//                String pageLink = this.siteUrl + pageEl.attr("href");
-//                System.out.println(pageLink);
-//            }
-//
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
+    private List<String> parseProfileLinks(String page) {
+        Document listPage = Jsoup.parse(page);
+        Elements profileLinks = listPage.select("div.result h2.fontot a.companyname");
+
+        List<String> profilesList = new ArrayList<String>();
+        for (Element pageEl : profileLinks) {
+            String pageLink = this.siteUrl + pageEl.attr("href");
+            profilesList.add(pageLink);
+        }
+
+        return profilesList;
+    }
+
+    private SubscriberBean parseSubscriber(String profileLink) {
+
+        try {
+            Document doc = Jsoup.connect(profileLink)
+                    .userAgent("Mozilla")
+                    .get();
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 }
