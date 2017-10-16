@@ -1,31 +1,44 @@
 import com.opencsv.bean.CsvBindByName;
 
-public class SubscriberBean {
+import java.io.Serializable;
+
+public class SubscriberBean implements Serializable {
 
     @CsvBindByName
-    private String Name;
+    String email;
 
     @CsvBindByName
-    private String Email;
+    String name;
+
+    public SubscriberBean() {}
+
+    public SubscriberBean(String email, String name) {
+        this.email = email;
+        this.name = name;
+    }
 
     public String getName() {
-        return Name;
+        return name;
     }
 
     public void setName(String name) {
-        Name = name;
+        this.name = name;
     }
 
     public String getEmail() {
-        return Email;
+        return email;
     }
 
     public void setEmail(String email) {
-        Email = email;
+        this.email = email;
     }
 
     @Override
     public String toString() {
-        return "SubscriberBean{" + "Name=" + Name + ", Email=" + Email + '}';
+        return "SubscriberBean [" + "Email=" + email + ", Name=" + name + ']';
+    }
+
+    public Boolean isEmpty() {
+        return (this.name.equals("") || this.email.equals("") || this.name == null || this.email == null);
     }
 }
