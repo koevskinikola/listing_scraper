@@ -3,12 +3,16 @@ import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.opencsv.bean.StatefulBeanToCsv;
+import com.opencsv.bean.StatefulBeanToCsvBuilder;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Writer;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +24,8 @@ import java.util.Map;
 public class LBScraper {
     private String siteUrl;
     private String searchUrl;
+    private String host;
+    private int port;
 
     public LBScraper(String searchString) {
         this.siteUrl = "http://www.abv.mk/";
@@ -34,14 +40,20 @@ public class LBScraper {
 
         try {
             // Use proxy for page parsing
-            Page proxyPage = webClient.getPage("http://proxy.minjja.lt/api/?type=http");
-            WebResponse response = proxyPage.getWebResponse();
-            if (response.getContentType().equals("application/json")) {
-                String jsonProxy = response.getContentAsString();
-                Map<String, String> jsonMap = new Gson().fromJson(jsonProxy, new TypeToken<Map<String,String>>() {}.getType());
-                ProxyConfig proxyConfig = new ProxyConfig(jsonMap.get("ip"), Integer.valueOf(jsonMap.get("port")));
-                webClient.getOptions().setProxyConfig(proxyConfig);
-            }
+//            Page proxyPage = webClient.getPage("http://proxy.minjja.lt/api/?type=http");
+//            WebResponse response = proxyPage.getWebResponse();
+//            if (response.getContentType().equals("application/json")) {
+//                String jsonProxy = response.getContentAsString();
+//                Map<String, String> jsonMap = new Gson().fromJson(jsonProxy, new TypeToken<Map<String,String>>() {}.getType());
+//
+//                System.out.println("Proxy: " + jsonMap.get("ip") + ":" + jsonMap.get("port"));
+//                this.host = jsonMap.get("ip");
+//                this.port = Integer.valueOf(jsonMap.get("port"));
+//                System.setProperty("http.proxyHost", jsonMap.get("ip"));
+//                System.setProperty("http.proxyPort", jsonMap.get("port"));
+//                ProxyConfig proxyConfig = new ProxyConfig(this.host, this.port);
+//                webClient.getOptions().setProxyConfig(proxyConfig);
+//            }
 
             // Change charset for non-latin alphabet pages
             WebRequest webRequest = new WebRequest(new URL(this.searchUrl));
@@ -60,14 +72,23 @@ public class LBScraper {
                     // Wait for javascript to catch up.
                     count = webClient.waitForBackgroundJavaScript(3000);
                 }
+
+                pageNum--;
             }
 
             List<SubscriberBean> subscribers = new ArrayList<SubscriberBean>();
             for (String link : profileLinks) {
+                SubscriberBean sb = parseSubscriber(link);
 
-                subscribers.add(parseSubscriber(link));
-
+                if(!sb.isEmpty()) {
+                    subscribers.add(sb);
+                }
             }
+
+            Writer writer = new FileWriter("subscribers.csv");
+            StatefulBeanToCsv beanToCsv = new StatefulBeanToCsvBuilder(writer).build();
+            beanToCsv.write(subscribers);
+            writer.close();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -76,7 +97,8 @@ public class LBScraper {
 
     private List<String> parseProfileLinks(String page) {
         Document listPage = Jsoup.parse(page);
-        Elements profileLinks = listPage.select("div.result h2.fontot a.companyname");
+
+        Elements profileLinks = listPage.select("div.comline h3 a");
 
         List<String> profilesList = new ArrayList<String>();
         for (Element pageEl : profileLinks) {
@@ -94,10 +116,18 @@ public class LBScraper {
                     .userAgent("Mozilla")
                     .get();
 
+            Elements nameElements = doc.select("h1[itemprop='name']");
+            Elements emailElements = doc.select("span#ctl00_ContentPlaceHolder1_lblComWeb a[href^='mailto']");
 
+            if (nameElements.isEmpty() || emailElements.isEmpty())
+                return new SubscriberBean("", "");
+            else
+                return new SubscriberBean(emailElements.first().text(), nameElements.first().text());
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        return new SubscriberBean("", "");
     }
 
 }
